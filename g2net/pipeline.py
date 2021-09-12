@@ -6,6 +6,21 @@ import logging
 import os
 
 
+def params_to_str(params: Dict) -> str:
+    """
+    Convert a parameter dictionary into a string for storage.
+    """
+    param_str = ''
+    for param in params.values():
+        if isinstance(param, bool):
+            param_str += f'{int(param)}'
+        elif isinstance(param, float):
+            param_str += f'{param:.2f}'
+        else:
+            param_str += f'{param}'
+    return param_str
+
+
 class CkptClassifier:
     def __init__(self, classifier_class, ckpt_path: Optional[str]=None, **model_params) -> None:
         self._classifier_class = classifier_class
@@ -45,7 +60,7 @@ class CkptDataLoader:
     batch_size: int
     expected_shape: Tuple[int, int]
     ckpt_path: Optional[str] = None
-    _batch_id: Optional[int] = 0
+    batch_id: Optional[int] = 0
     
     def __enter__(self):
         # Create a DateLoader from saved data        
@@ -54,7 +69,8 @@ class CkptDataLoader:
                 with open(self.ckpt_path, 'rb') as ckpt_file:
                     # Load the checkpoint file
                     ckpt_data = joblib.load(ckpt_file)
-                    self._batch_id = ckpt_data.get(_BATCH_ID, 0)
+                    self.batch_id = ckpt_data.get(_BATCH_ID, 0)
+                    logging.info(f'Continue training from batch {self.batch_id}')
             except EOFError as e:
                 logging.warning(f'Failed to load checkpoint: {e}')
         return self
@@ -65,19 +81,19 @@ class CkptDataLoader:
             return
         
         with open(self.ckpt_path, 'wb') as ckpt_file:
-            joblib.dump({_BATCH_ID: self._batch_id}, ckpt_file)
+            joblib.dump({_BATCH_ID: self.batch_id}, ckpt_file)
     
     def __iter__(self):
         return self
     
     def __next__(self):
-        if self._batch_id < self.n_batch:
+        if self.batch_id < self.n_batch:
             samples = load_n_samples_with_label(self.all_file_names, 
                                                 self.all_labels, 
-                                                self._batch_id * self.batch_size, 
+                                                self.batch_id * self.batch_size, 
                                                 self.batch_size, 
                                                 self.expected_shape)
-            self._batch_id += 1
+            self.batch_id += 1
             return samples
         else:
             raise StopIteration
